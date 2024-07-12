@@ -1,54 +1,73 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using PicPayDesafio.Data;
+using PicPayDesafio.DTO;
 using PicPayDesafio.Entities;
 using PicPayDesafio.Repository;
 using System.Text;
 
 namespace PicPayDesafio.Service
 {
-    public class TransicaoService (UsuarioService usuarioService, DataBase context, UsuarioRepository usuarioRepository,HttpClient httpClient)
+    public class TransicaoService(UsuarioService usuarioService, DataBase context, UsuarioRepository usuarioRepository, HttpClient httpClient, TransicaoRepository transicaoRepository)
     {
         private readonly UsuarioService _usuarioService = usuarioService;
         private readonly UsuarioRepository _usuarioRepository = usuarioRepository;
+        private readonly TransicaoRepository _transicaoRepository = transicaoRepository;
         private readonly DataBase _context = context;
         private readonly HttpClient _httpClient = httpClient;
 
 
+        public async Task<IList<Transicao>> GetAll()
+        {
+            List<Transicao> trancicoes = await _transicaoRepository.GetAllTransicoes();
+
+            if (trancicoes == null)
+                throw new Exception("Nenhuma transição foi encontrada");
+
+
+            return trancicoes;
+        }
+
+        public async Task<IList<Transicao>> GetAllByUser(string email)
+        {
+            List<Transicao> trancicoes = await _transicaoRepository.GetTransicoesEnviadasByUser(email);
+
+            if (trancicoes == null)
+                throw new Exception("Nenhuma transição foi encontrada");
+
+
+            return trancicoes;
+        }
 
         public async Task<string> SendMoney(decimal valorEnviado, string emailSender, string emailRecebedor)
         {
-            using (var transicao = await _context.Database.BeginTransactionAsync())
+            try
             {
-                try
-                {
-                    Usuario remetente = await _usuarioRepository.Get(emailSender) ?? throw new Exception("Email do remetente inválido");
-                    Usuario usuarioRecebedor = await _usuarioRepository.Get(emailRecebedor) ?? throw new Exception("Email do destinatário inválido");
+                Usuario remetente = await _usuarioRepository.Get(emailSender) ?? throw new Exception("Email do remetente inválido");
+                Usuario usuarioRecebedor = await _usuarioRepository.Get(emailRecebedor) ?? throw new Exception("Email do destinatário inválido");
 
-                    await _usuarioService.ValidacaoDeTransicao(emailSender, valorEnviado);
+                await _usuarioService.ValidacaoDeTransicao(emailSender, valorEnviado);
 
-                    bool autorizado = await AutorizarTransacao(remetente, valorEnviado);
-                    if (!autorizado)
-                        throw new Exception("Transação não autorizada");
+                //bool autorizado = await AutorizarTransacao(remetente, valorEnviado);
+                //if (!autorizado)
+                //    throw new Exception("Transação não autorizada");
 
-                    remetente.Saldo -= valorEnviado;
-                    usuarioRecebedor.Saldo += valorEnviado;
+                remetente.Saldo -= valorEnviado;
+                usuarioRecebedor.Saldo += valorEnviado;
 
-                    await _usuarioRepository.Update(remetente);
-                    await _usuarioRepository.Update(usuarioRecebedor);
+                await _usuarioRepository.Update(remetente);
+                await _usuarioRepository.Update(usuarioRecebedor);
 
-                    await transicao.CommitAsync();
+                Transicao trancicao = new Transicao(valor: valorEnviado, remetente: emailSender, destinatario: emailRecebedor);
 
-                    return "Valor enviado com sucesso!";
+                await _transicaoRepository.Add(trancicao);
 
-                }
-                catch (Exception ex)
-                {
-                    await transicao.RollbackAsync();
-                    return ("Houve algum erro");
-                }
+                return "Valor enviado com sucesso!";
 
-
+            }
+            catch (Exception ex)
+            {
+                return ("Houve algum erro");
             }
 
         }
@@ -58,14 +77,14 @@ namespace PicPayDesafio.Service
             var request = new HttpRequestMessage(HttpMethod.Post, "https://util.devi.tools/api/v2/authorize");
 
 
-            var requestBody = new {usuario, valor};
+            var requestBody = new { usuario, valor };
 
             var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
             request.Content = content;
 
             var response = await _httpClient.SendAsync(request);
 
-            if(response.IsSuccessStatusCode)
+            if (response.IsSuccessStatusCode)
             {
                 var responseContent = await response.Content.ReadAsStringAsync();
                 var result = JsonConvert.DeserializeObject<AuthorizationResponse>(responseContent);
