@@ -15,7 +15,7 @@ Este projeto implementa um sistema de transferência de dinheiro entre usuários
 
 - **Backend**: .NET
 - **Banco de Dados**: SQL Server
-- **Autorização de Transações**: API externa (`https://util.devi.tools/api/v2/authorize`)
+- **Autorização de Transações**: Mock externo (`https://util.devi.tools/api/v2/authorize`)
 - **Ferramentas de Desenvolvimento**: Visual Studio, Postman
 
 ## O MOCK DE AUTORIZAÇÃO ULTILIZADO JÁ ESTA EXPIRADO.
